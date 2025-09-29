@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大型语言模型对齐算法演进指南</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A single-page, scroll-based narrative structure designed for beginners. The flow is chronological and logical: 1. Introduction to the core problem of alignment. 2. Deep dive into the foundational RLHF/PPO method. 3. Introduction of DPO as a paradigm shift. 4. A timeline showcasing further evolution to GRPO/GSPO. 5. An interactive comparison tool (radar chart) for a holistic understanding. 6. A summary of the key takeaways. This structure guides the user from the "why" to the "how" and then to the "what's next," which is ideal for an educational piece. A sticky navigation bar allows users to jump between these logical sections easily. -->
+    <!-- Visualization & Content Choices: 
+        1. Alignment Feedback Loop: Report Info -> Core concept of alignment -> Goal: Inform -> Viz: Simple HTML/CSS animated diagram -> Interaction: Hover to see details on each stage -> Justification: Provides an immediate, intuitive grasp of the fundamental process.
+        2. RLHF 3-Step Process: Report Info -> RLHF methodology -> Goal: Organize -> Viz: Numbered vertical steps with icons (HTML/CSS) -> Interaction: Clicking a step reveals its detailed explanation -> Justification: Deconstructs a complex pipeline into manageable, interactive learning modules.
+        3. RLHF vs. DPO Pipeline: Report Info -> Architectural difference between RLHF and DPO -> Goal: Compare -> Viz: Side-by-side comparison diagrams (HTML/CSS) -> Interaction: Static -> Justification: Visually highlights DPO's simplification, which is its main selling point.
+        4. Algorithm Evolution Timeline: Report Info -> Chronology of algorithms -> Goal: Show Change -> Viz: A horizontal timeline (HTML/CSS) -> Interaction: Clickable nodes for each algorithm to show a summary -> Justification: Effectively visualizes the rapid progress and historical context of the field.
+        5. Multi-Algorithm Comparison: Report Info -> Pros and cons of all discussed algorithms -> Goal: Compare -> Viz: Radar Chart (Chart.js) -> Interaction: Checkboxes to dynamically add/remove algorithms from the chart -> Justification: Empowers the user to perform their own comparisons based on multiple criteria (cost, stability, etc.), fostering deeper understanding.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #FDFBF8;
+            color: #3f3f46;
+        }
+        .section-card {
+            background-color: #FFFFFF;
+            border: 1px solid #F3EFEA;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .section-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+        }
+        .nav-link {
+            transition: color 0.3s, border-bottom-color 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link:hover, .nav-link.active {
+            color: #2563eb;
+            border-bottom-color: #2563eb;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+        .step-item {
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .step-item.active {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+        }
+        .code-block {
+            background-color: #282c34;
+            color: #abb2bf;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+        }
+        .code-block .token.keyword { color: #c678dd; }
+        .code-block .token.function { color: #61afef; }
+        .code-block .token.comment { color: #5c6370; }
+        .code-block .token.number { color: #d19a66; }
+        .code-block .token.string { color: #98c379; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header id="header" class="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-200 transition-all duration-300">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between h-16">
+                <h1 class="text-xl md:text-2xl font-bold text-gray-800">LLM 对齐算法演进</h1>
+                <nav class="hidden md:flex space-x-6">
+                    <a href="#intro" class="nav-link text-gray-600 font-medium pb-1">引言</a>
+                    <a href="#rlhf" class="nav-link text-gray-600 font-medium pb-1">RLHF 时代</a>
+                    <a href="#dpo" class="nav-link text-gray-600 font-medium pb-1">DPO 变革</a>
+                    <a href="#evolution" class="nav-link text-gray-600 font-medium pb-1">算法演进</a>
+                    <a href="#comparison" class="nav-link text-gray-600 font-medium pb-1">综合对比</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-8">
+        
+        <section id="intro" class="my-8 scroll-mt-20">
+            <div class="section-card p-6 md:p-8">
+                <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-4 text-center">什么是大模型对齐？</h2>
+                <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-8">
+                    大型语言模型 (LLM) 经过预训练后，学会了根据海量文本数据预测下一个词，但这并不意味着它能理解并遵循人类的复杂指令和价值观。模型对齐 (Alignment) 的目标就是通过微调，让模型学会生成有用的 (Helpful)、诚实的 (Honest) 且无害的 (Harmless) 的内容，使其行为更符合人类的偏好和期望。
+                </p>
+                <div class="w-full max-w-2xl mx-auto p-6 bg-gray-50 rounded-lg">
+                    <div class="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-4">
+                        <div class="text-center group">
+                            <div class="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center text-4xl mx-auto transition-transform duration-300 group-hover:scale-110">🤖</div>
+                            <p class="mt-2 font-semibold">LLM 生成回答</p>
+                            <p class="text-sm text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">模型根据指令输出多个候选答案。</p>
+                        </div>
+                        <div class="text-5xl text-blue-300 font-light transform rotate-90 md:rotate-0">→</div>
+                        <div class="text-center group">
+                            <div class="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center text-4xl mx-auto transition-transform duration-300 group-hover:scale-110">👩‍⚖️</div>
+                            <p class="mt-2 font-semibold">人类进行反馈</p>
+                             <p class="text-sm text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">标注者对答案进行排序或打分。</p>
+                        </div>
+                        <div class="text-5xl text-green-300 font-light transform rotate-90 md:rotate-0">→</div>
+                        <div class="text-center group">
+                            <div class="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center text-4xl mx-auto transition-transform duration-300 group-hover:scale-110">🧠</div>
+                            <p class="mt-2 font-semibold">模型学习偏好</p>
+                             <p class="text-sm text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">通过算法更新模型，使其更懂人类。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="rlhf" class="my-8 scroll-mt-20">
+            <div class="section-card p-6 md:p-8">
+                <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2 text-center">开创时代：从人类反馈中强化学习 (RLHF)</h2>
+                <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-8">
+                    RLHF 是对齐领域的开创性工作，它首次成功地将强化学习应用于 LLM 微调。其核心思想是训练一个奖励模型 (Reward Model) 来模拟人类的偏好，然后用这个奖励模型作为信号，通过强化学习算法 (如 PPO) 来优化语言模型。整个过程虽然复杂，但效果显著，是 ChatGPT 等早期成功模型背后的关键技术。
+                </p>
+                <div class="flex flex-col lg:flex-row gap-8">
+                    <div class="lg:w-1/3">
+                        <h3 class="text-xl font-semibold mb-4 text-center">RLHF 的三步流程</h3>
+                        <div id="rlhf-steps" class="space-y-4">
+                            <div id="step-1" class="step-item p-4 border-2 border-transparent rounded-lg cursor-pointer bg-gray-50">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xl mr-4">1</div>
+                                    <div>
+                                        <h4 class="font-bold">监督微调 (SFT)</h4>
+                                        <p class="text-sm text-gray-600">获取初始模型</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="step-2" class="step-item p-4 border-2 border-transparent rounded-lg cursor-pointer">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center font-bold text-xl mr-4">2</div>
+                                    <div>
+                                        <h4 class="font-bold">训练奖励模型 (RM)</h4>
+                                        <p class="text-sm text-gray-600">学习人类偏好</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="step-3" class="step-item p-4 border-2 border-transparent rounded-lg cursor-pointer">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold text-xl mr-4">3</div>
+                                    <div>
+                                        <h4 class="font-bold">PPO 强化学习</h4>
+                                        <p class="text-sm text-gray-600">优化语言模型</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="rlhf-details" class="lg:w-2/3 p-6 bg-gray-50 rounded-lg">
+                        
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="dpo" class="my-8 scroll-mt-20">
+            <div class="section-card p-6 md:p-8">
+                <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2 text-center">范式革新：直接偏好优化 (DPO)</h2>
+                <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-8">
+                    RLHF 流程复杂、训练不稳定。DPO (Direct Preference Optimization) 提出了一种革命性的新范式。它巧妙地证明了，可以通过一个简单的分类损失函数，直接在偏好数据上优化语言模型，其效果等价于 RLHF。这省去了训练奖励模型和强化学习的复杂步骤，让对齐过程变得像监督微调一样简单、稳定。
+                </p>
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div class="p-6 border rounded-lg">
+                        <h3 class="text-xl font-semibold mb-4 text-center">RLHF 流程</h3>
+                        <div class="space-y-4 text-center">
+                            <div class="p-3 bg-blue-100 rounded-lg">SFT 初始模型</div>
+                            <div class="text-2xl">↓</div>
+                            <div class="p-3 bg-green-100 rounded-lg">训练奖励模型</div>
+                            <div class="text-2xl">↓</div>
+                            <div class="p-3 bg-purple-100 rounded-lg">PPO 强化学习</div>
+                            <div class="text-2xl">↓</div>
+                            <div class="p-3 bg-red-100 rounded-lg">最终对齐模型</div>
+                        </div>
+                    </div>
+                    <div class="p-6 border-2 border-blue-500 bg-blue-50 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-4 text-center text-blue-800">DPO 流程 (更简单)</h3>
+                        <div class="space-y-4 text-center flex flex-col justify-center h-full">
+                           <div class="p-3 bg-blue-100 rounded-lg">SFT 初始模型</div>
+                           <div class="text-2xl text-blue-500">↓</div>
+                           <div class="p-3 bg-blue-200 rounded-lg font-bold">直接在偏好数据上优化</div>
+                           <div class="text-2xl text-blue-500">↓</div>
+                           <div class="p-3 bg-blue-300 rounded-lg">最终对齐模型</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-8">
+                     <h3 class="text-xl font-semibold mb-4 text-center">DPO 核心思想与实现</h3>
+                     <p class="text-gray-600 mb-4 max-w-3xl mx-auto">DPO的核心在于其损失函数。它将问题转化为一个简单的二元分类任务：最大化模型认为“更优回答” ($y_w$) 的概率，同时最小化“更差回答” ($y_l$) 的概率。这个概率差值通过一个 sigmoid 函数进行建模。它不需要显式的奖励模型，而是直接利用 SFT 模型的隐式奖励差异来更新策略模型。</p>
+                     <div class="code-block text-sm">
+                        <pre><code><span class="token.comment"># DPO 损失函数的 Python 伪代码</span>
+<span class="token.keyword">def</span> <span class="token.function">dpo_loss</span>(policy_chosen_logps, policy_rejected_logps, 
+             ref_chosen_logps, ref_rejected_logps, beta):
+    <span class="token.comment"># policy 是当前要训练的模型, ref 是 SFT 初始模型</span>
+    pi_log_ratio = policy_chosen_logps - policy_rejected_logps
+    ref_log_ratio = ref_chosen_logps - ref_rejected_logps
+    
+    logits = pi_log_ratio - ref_log_ratio
+    
+    <span class="token.comment"># 关键部分：一个简单的 logistic 损失</span>
+    loss = -<span class="token.function">log_sigmoid</span>(beta * logits)
+    <span class="token.keyword">return</span> loss.<span class="token.function">mean</span>()</code></pre>
+                     </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="evolution" class="my-8 scroll-mt-20">
+            <div class="section-card p-6 md:p-8">
+                 <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2 text-center">DPO 之后：算法的演进之路</h2>
+                 <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-8">
+                    DPO 的成功开启了对齐算法研究的新篇章。研究者们开始探索如何进一步提升 DPO 的性能、解决其潜在问题（如对数据噪声敏感），并将偏好学习的思想扩展到更复杂的场景。
+                </p>
+                <div class="relative w-full overflow-x-auto pb-8">
+                    <div class="flex items-center" style="min-width: 800px;">
+                        <div class="w-full h-1 bg-gray-300 absolute top-1/2 transform -translate-y-1/2"></div>
+                        <div id="timeline-container" class="w-full flex justify-between relative">
+                        </div>
+                    </div>
+                </div>
+                 <div id="timeline-details" class="mt-8 p-6 bg-gray-50 rounded-lg min-h-[150px]">
+                    <p class="text-gray-500 text-center">点击上方时间线上的节点查看详情。</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="comparison" class="my-8 scroll-mt-20">
+            <div class="section-card p-6 md:p-8">
+                <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2 text-center">各项算法综合对比</h2>
+                <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-8">
+                    不同的对齐算法在计算成本、稳定性、数据效率和实现难度上各有千秋。通过下面的雷达图，你可以直观地比较它们的优缺点。选择合适的算法通常需要在模型性能和工程成本之间做出权衡。
+                </p>
+                <div class="flex flex-col md:flex-row gap-8 items-center">
+                    <div class="w-full md:w-2/3">
+                        <div class="chart-container">
+                             <canvas id="comparisonChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="w-full md:w-1/3">
+                        <h3 class="font-semibold mb-4 text-lg">选择要对比的算法:</h3>
+                        <div id="chart-controls" class="space-y-2">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+    </main>
+    <footer class="text-center p-4 mt-8 text-gray-500 border-t">
+        <p>&copy; 2025 LLM 对齐算法学习指南</p>
+    </footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    // RLHF Steps Interaction
+    const rlhfStepsData = {
+        'step-1': {
+            title: '第一步：监督微调 (SFT)',
+            content: '使用高质量的“指令-回答”数据对预训练模型进行微调。这一步的目的是让模型首先具备理解并遵循指令的基本能力，为后续的偏好学习打下基础。这个模型也被称为参考模型 (Reference Model)。'
+        },
+        'step-2': {
+            title: '第二步：训练奖励模型 (RM)',
+            content: '收集人类偏好数据。对于同一个指令，让 SFT 模型生成多个回答，然后由人类标注者对这些回答进行排序。利用这些排序数据，训练一个奖励模型。这个模型输入一个“指令-回答”对，输出一个标量分数，分数越高代表人对此越偏爱。'
+        },
+        'step-3': {
+            title: '第三步：PPO 强化学习',
+            content: '这是最关键也是最复杂的一步。将 SFT 模型作为策略，在奖励模型构建的环境中进行探索。策略模型生成回答，奖励模型给出奖励分数。通过 PPO 算法，最大化累计奖励，同时用一个 KL 散度惩罚项防止策略模型偏离 SFT 模型太远，避免模型遗忘基础能力。'
+        }
+    };
+    
+    const rlhfStepsContainer = document.getElementById('rlhf-steps');
+    const rlhfDetailsContainer = document.getElementById('rlhf-details');
+    
+    function updateRlhfDetails(stepId) {
+        const data = rlhfStepsData[stepId];
+        rlhfDetailsContainer.innerHTML = `
+            <h4 class="text-xl font-bold text-gray-800 mb-2">${data.title}</h4>
+            <p class="text-gray-600">${data.content}</p>
+        `;
+        
+        rlhfStepsContainer.querySelectorAll('.step-item').forEach(el => {
+            el.classList.remove('active', 'bg-blue-50', 'border-blue-500');
+            el.classList.add('bg-gray-50');
+            if (el.id === stepId) {
+                el.classList.add('active', 'bg-blue-50', 'border-blue-500');
+                el.classList.remove('bg-gray-50');
+            }
+        });
+    }
+    
+    rlhfStepsContainer.addEventListener('click', (e) => {
+        const stepItem = e.target.closest('.step-item');
+        if (stepItem) {
+            updateRlhfDetails(stepItem.id);
+        }
+    });
+
+    updateRlhfDetails('step-1');
+
+
+    // Timeline Interaction
+    const timelineData = [
+        { 
+            id: 'ppo',
+            year: '2022 (应用于LLM)', 
+            name: 'PPO',
+            title: 'Proximal Policy Optimization (近端策略优化)',
+            content: '作为 RLHF 的核心，PPO 是一种强大的强化学习算法。它的主要优势在于通过“裁剪”目标函数，限制了每次策略更新的幅度，从而保证了训练的稳定性，这在复杂的语言模型优化中至关重要。',
+            color: 'bg-purple-500'
+        },
+        { 
+            id: 'dpo',
+            year: '2023', 
+            name: 'DPO',
+            title: 'Direct Preference Optimization (直接偏好优化)',
+            content: 'DPO 是一个里程碑。它抛弃了复杂的强化学习框架，将偏好学习问题巧妙地转化为一个简单的分类问题。这使得对齐训练变得像 SFT 一样稳定和高效，大大降低了工程实现的门槛。',
+            color: 'bg-blue-500'
+        },
+        { 
+            id: 'grpo',
+            year: '2024', 
+            name: 'GRPO',
+            title: 'Group Reward Preference Optimization (分组奖励偏好优化)',
+            content: 'GRPO 旨在解决 DPO 对数据噪声敏感的问题。它引入了分组奖励的概念，不要求偏好数据中的“赢家”绝对优于“输家”，而是认为“赢家”的平均奖励更高。这使得算法对标注错误和模糊偏好有更好的鲁棒性。',
+            color: 'bg-green-500'
+        },
+        { 
+            id: 'gspo',
+            year: '2024', 
+            name: 'GSPO',
+            title: 'Grounded Simplex Preference Optimization (基准化单形偏好优化)',
+            content: 'GSPO 是最新的探索之一，它试图解决多模型、多目标对齐的问题。它通过在一个“偏好单形”空间中进行优化，并引入一个“基准点”（如一个安全模型），使得可以在保证某些底线（如安全性）的同时，优化其他目标（如帮助性），为更复杂的对齐任务提供了新思路。',
+            color: 'bg-orange-500'
+        },
+    ];
+
+    const timelineContainer = document.getElementById('timeline-container');
+    const timelineDetails = document.getElementById('timeline-details');
+
+    timelineData.forEach(item => {
+        const node = document.createElement('div');
+        node.className = 'flex flex-col items-center z-10 cursor-pointer group';
+        node.innerHTML = `
+            <div class="w-5 h-5 ${item.color} rounded-full border-4 border-white transition-transform duration-300 group-hover:scale-125"></div>
+            <p class="mt-2 font-bold">${item.name}</p>
+            <p class="text-sm text-gray-500">${item.year}</p>
+        `;
+        node.addEventListener('click', () => {
+            timelineDetails.innerHTML = `
+                <h4 class="text-xl font-bold text-gray-800 mb-2">${item.title} (${item.name})</h4>
+                <p class="text-gray-600">${item.content}</p>
+            `;
+        });
+        timelineContainer.appendChild(node);
+    });
+
+    // Comparison Chart
+    const chartData = {
+        labels: ['稳定性', '数据效率', '实现难度', '计算成本', '性能上限'],
+        datasets: [
+            {
+                label: 'PPO (RLHF)',
+                data: [2, 3, 1, 1, 5],
+                borderColor: 'rgba(139, 92, 246, 1)',
+                backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                hidden: false,
+            },
+            {
+                label: 'DPO',
+                data: [5, 4, 5, 4, 4],
+                borderColor: 'rgba(59, 130, 246, 1)',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                hidden: false,
+            },
+            {
+                label: 'GRPO',
+                data: [5, 3, 4, 4, 4],
+                borderColor: 'rgba(16, 185, 129, 1)',
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                hidden: true,
+            },
+            {
+                label: 'GSPO',
+                data: [4, 2, 2, 2, 5],
+                borderColor: 'rgba(249, 115, 22, 1)',
+                backgroundColor: 'rgba(249, 115, 22, 0.2)',
+                hidden: true,
+            }
+        ]
+    };
+    const chartControls = document.getElementById('chart-controls');
+    const ctx = document.getElementById('comparisonChart').getContext('2d');
+    const comparisonChart = new Chart(ctx, {
+        type: 'radar',
+        data: chartData,
+        options: {
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    angleLines: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    },
+                    pointLabels: {
+                        font: {
+                            size: 14
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        beginAtZero: true,
+                        max: 5,
+                        min: 0,
+                        stepSize: 1,
+                        backdropColor: 'rgba(255, 255, 255, 0.75)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            label += context.raw;
+                            const interpretations = {
+                                1: '(差)', 2: '(中-)', 3: '(中)', 4: '(中+)', 5: '(优)'
+                            };
+                            label += ' ' + interpretations[context.raw];
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    chartData.datasets.forEach((dataset, index) => {
+        const controlContainer = document.createElement('div');
+        controlContainer.className = 'flex items-center';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `dataset-${index}`;
+        checkbox.checked = !dataset.hidden;
+        checkbox.className = 'h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500';
+        checkbox.style.accentColor = dataset.borderColor;
+        checkbox.addEventListener('change', () => {
+            comparisonChart.data.datasets[index].hidden = !checkbox.checked;
+            comparisonChart.update();
+        });
+        
+        const label = document.createElement('label');
+        label.htmlFor = `dataset-${index}`;
+        label.className = 'ml-2 block text-sm text-gray-900';
+        label.textContent = dataset.label;
+        
+        controlContainer.appendChild(checkbox);
+        controlContainer.appendChild(label);
+        chartControls.appendChild(controlContainer);
+    });
+
+    // Nav Link Active State on Scroll
+    const sections = document.querySelectorAll('section');
+    const navLinks = document.querySelectorAll('.nav-link');
+    
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(section => {
+            const sectionTop = section.offsetTop;
+            if (pageYOffset >= sectionTop - 80) {
+                current = section.getAttribute('id');
+            }
+        });
+
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href').includes(current)) {
+                link.classList.add('active');
+            }
+        });
+    });
+
+});
+</script>
+
+</body>
+</html>
